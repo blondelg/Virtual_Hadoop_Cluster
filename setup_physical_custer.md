@@ -1,4 +1,4 @@
-# TUTO INSTALL HADOOP
+# Tuto Install Hadoop
 
 ## Create hduser
 
