@@ -1,71 +1,115 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
-# All Vagrant configuration is done below. The "2" in Vagrant.configure
-# configures the configuration version (we support older styles for
-# backwards compatibility). Please don't change it unless you know what
-# you're doing.
 Vagrant.configure("2") do |config|
-  # The most common configuration options are documented and commented below.
-  # For a complete reference, please see the online documentation at
-  # https://docs.vagrantup.com.
 
-  # Every Vagrant development environment requires a box. You can search for
-  # boxes at https://vagrantcloud.com/search.
-  config.vm.box = "ubuntu/trusty64"
+  #config.vm.provision "shell", inline: "developping stuff ........."
 
-  # Disable automatic box update checking. If you disable this, then
-  # boxes will only be checked for updates when the user runs
-  # `vagrant box outdated`. This is not recommended.
-  # config.vm.box_check_update = false
+  config.vm.define "master" do |master|
+    config.vm.box = "ubuntu/trusty64"
+    config.vm.network "private_network", ip: "192.168.33.10"
 
-  # Create a forwarded port mapping which allows access to a specific port
-  # within the machine from a port on the host machine. In the example below,
-  # accessing "localhost:8080" will access port 80 on the guest machine.
-  # NOTE: This will enable public access to the opened port
-  # config.vm.network "forwarded_port", guest: 80, host: 8080
+    # get vagrantfile's path
+    vagrantfile_path = File.dirname(__FILE__)
 
-  # Create a forwarded port mapping which allows access to a specific port
-  # within the machine from a port on the host machine and only allow access
-  # via 127.0.0.1 to disable public access
-  # config.vm.network "forwarded_port", guest: 80, host: 8080, host_ip: "127.0.0.1"
+    # download hadoop package
+    config.vm.provision "file", source: "#{vagrantfile_path}/hadoop-2.9.2.tar.gz", destination: "hadoop-2.9.2.tar.gz"
 
-  # Create a private network, which allows host-only access to the machine
-  # using a specific IP.
-  config.vm.network "private_network", ip: "192.168.33.10"
+    # provision to be executed at VM startup
+    config.vm.provision "shell", inline: <<-SHELL
 
-  # Create a public network, which generally matched to bridged network.
-  # Bridged networks make the machine appear as another physical device on
-  # your network.
-  # config.vm.network "public_network"
+      # hduser setting
+      sudo addgroup hadoop_group
+      sudo adduser --ingroup hadoop_group hduser --disabled-password
+      echo "hduser:hadoop" | sudo chpasswd
+      sudo adduser hduser sudo
 
-  # Share an additional folder to the guest VM. The first argument is
-  # the path on the host to the actual folder. The second argument is
-  # the path on the guest to mount the folder. And the optional third
-  # argument is a set of non-required options.
-  config.vm.synced_folder "/home/geoffroy/Documents/1_projets_persos/1_virtual_multi_node_cluster/shared_VM", "/home/vagrant"
+      # unpack hadoop
+      tar -xvzf /home/vagrant/hadoop-2.9.2.tar.gz
 
-  # Provider-specific configuration so you can fine-tune various
-  # backing providers for Vagrant. These expose provider-specific options.
-  # Example for VirtualBox:
-  #
-  # config.vm.provider "virtualbox" do |vb|
-  #   # Display the VirtualBox GUI when booting the machine
-  #   vb.gui = true
-  #
-  #   # Customize the amount of memory on the VM:
-  #   vb.memory = "1024"
-  # end
-  #
-  # View the documentation for the provider you are using for more
-  # information on available options.
+      # rename archive
+      mv /home/vagrant/hadoop-2.9.2 /home/vagrant/hadoop
 
-  # Enable provisioning with a shell script. Additional provisioners such as
-  # Puppet, Chef, Ansible, Salt, and Docker are also available. Please see the
-  # documentation for more information about their specific syntax and use.
-  config.vm.provision "shell", inline: <<-SHELL
-    # To be executed at VM startup
-    mkdir /home/vagrant/pipo
+      # move to hadoop place
+      sudo mv /home/vagrant/hadoop /usr/local
 
-  SHELL
+      # install java
+      sudo apt-get install -y openjdk-7-jre
+
+      # rename java folder
+      sudo mv /usr/lib/jvm/java-7-openjdk-amd64 /usr/lib/jvm/java
+
+      # create HADOOP_HOME and JAVA_HOME variable for setting
+      export HADOOP_HOME=/usr/local/hadoop
+      export JAVA_HOME=/usr/lib/jvm/java
+
+      # append hduser's .bashrc file
+      echo "" >> /home/hduser/.bashrc
+      echo "# Set HADOOP_HOME variable" >> /home/hduser/.bashrc
+      echo "export HADOOP_HOME=/usr/local/hadoop" >> /home/hduser/.bashrc
+      echo "" >> /home/hduser/.bashrc
+      echo "# Set JAVA_HOME variable" >> /home/hduser/.bashrc
+      echo "export JAVA_HOME=/usr/lib/jvm/java" >> /home/hduser/.bashrc
+      echo "" >> /home/hduser/.bashrc
+      echo "# Set PATH variable with hadoop and java pathes" >> /home/hduser/.bashrc
+      echo "export PATH="$PATH":"$HADOOP_HOME"/bin:"$HADOOP_HOME"/sbin:"$JAVA_HOME"/bin" >> /home/hduser/.bashrc
+      echo "" >> /home/hduser/.bashrc
+      echo "# Convenient alias" >> /home/hduser/.bashrc
+      echo "unalias fs &> /dev/null" >> /home/hduser/.bashrc
+      echo 'alias fs="hadoop fs"' >> /home/hduser/.bashrc
+      echo "unalias hls &> /dev/null" >> /home/hduser/.bashrc
+      echo 'alias hls="fs -ls"' >> /home/hduser/.bashrc
+
+      # reload hduser's .bashrc
+      source /home/hduser/.bashrc
+
+      # Hard code JAVA_HOME into "hadoop-env.sh"
+      echo "" >> $HADOOP_HOME/etc/hadoop/hadoop-env.sh
+      echo "export JAVA_HOME=/usr/lib/jvm/java" >> $HADOOP_HOME/etc/hadoop/hadoop-env.sh
+
+      # setup core-site.xml:
+      rm $HADOOP_HOME/etc/hadoop/core-site.xml
+      echo '<?xml version="1.0" encoding="UTF-8"?>' >> $HADOOP_HOME/etc/hadoop/core-site.xml
+      echo '<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>' >> $HADOOP_HOME/etc/hadoop/core-site.xml
+      echo "" >> $HADOOP_HOME/etc/hadoop/core-site.xml
+      echo "<configuration>" >> $HADOOP_HOME/etc/hadoop/core-site.xml
+      echo "    <property>" >> $HADOOP_HOME/etc/hadoop/core-site.xml
+      echo "        <name>fs.defaultFS</name>" >> $HADOOP_HOME/etc/hadoop/core-site.xml
+      echo "        <value>hdfs://localhost:9000</value>" >> $HADOOP_HOME/etc/hadoop/core-site.xml
+      echo "    </property>" >> $HADOOP_HOME/etc/hadoop/core-site.xml
+      echo "</configuration>" >> $HADOOP_HOME/etc/hadoop/core-site.xml
+
+      # setup hdfs-site.xml:
+      rm $HADOOP_HOME/etc/hadoop/hdfs-site.xml
+      echo '<?xml version="1.0" encoding="UTF-8"?>' >> $HADOOP_HOME/etc/hadoop/hdfs-site.xml
+      echo '<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>' >> $HADOOP_HOME/etc/hadoop/hdfs-site.xml
+      echo "" >> $HADOOP_HOME/etc/hadoop/hdfs-site.xml
+      echo "<configuration>" >> $HADOOP_HOME/etc/hadoop/hdfs-site.xml
+      echo "    <property>" >> $HADOOP_HOME/etc/hadoop/hdfs-site.xml
+      echo "        <name>dfs.replication</name>" >> $HADOOP_HOME/etc/hadoop/hdfs-site.xml
+      echo "        <value>1</value>" >> $HADOOP_HOME/etc/hadoop/hdfs-site.xml
+      echo "    </property>" >> $HADOOP_HOME/etc/hadoop/hdfs-site.xml
+      echo "</configuration>" >> $HADOOP_HOME/etc/hadoop/hdfs-site.xml
+
+      # set up ssh localhost connections
+      su hduser -c "ssh-keygen -t rsa -P '' -f /home/hduser/.ssh/id_rsa"
+      su hduser -c "cat /home/hduser/.ssh/id_rsa.pub >> /home/hduser/.ssh/authorized_keys"
+      su hduser -c "chmod 0600 /home/hduser/.ssh/authorized_keys"
+      su hduser -c "ssh localhost"
+      su hduser -c "exit"
+
+      # grant rights for hduser
+      su hduser -c 'sudo chmod 777 -R /usr/local/hadoop/'
+
+      # format HDFS
+      su hduser -c '$HADOOP_HOME/bin/hdfs namenode -format'
+
+      # Start NameNode daemon and DataNode daemon
+      su hduser -c '$HADOOP_HOME/sbin/start-dfs.sh'
+
+    SHELL
+
+  end
+
+
 end
