@@ -2,6 +2,13 @@
 how to deploy a virtual hadoop cluster
 
 # Steps and execution plan
+
+## Vagrant prugins:
+### vagrant-disksize
+vagrant plugin install vagrant-disksize
+### vagrant-share
+vagrant plugin install vagrant-share
+
 ## Step 1: setup master
 Download hadoop
 ## Step 2: setup slave1
